@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from detector import SafeSightDetector
 from events import process_events, ProximityTracker, load_events
 from zones import HazardZone, check_zone_violations, draw_zones, default_demo_zones
-from notifications import send_webhook_alert
+from notifications import send_webhook_alert, send_email_alert
 from events import (
     draw_proximity_alert, draw_zone_violation_alert, draw_trajectory_prediction,
     predict_positions, _compute_velocity
@@ -48,6 +48,7 @@ class AppState:
         self.zones = []
         self.current_frame_jpg = None
         self.webhook_url = ""
+        self.email_alert_to = ""
         self.conf_thresh = 0.4
         self.model_name = "yolov8n.pt"
         self.lock = threading.Lock()
@@ -59,6 +60,7 @@ class ConfigUpdate(BaseModel):
     video_source: Optional[str] = None
     rtsp_url: Optional[str] = None
     webhook_url: Optional[str] = None
+    email_alert_to: Optional[str] = None
     conf_thresh: Optional[float] = None
     model_name: Optional[str] = None
 
@@ -96,10 +98,12 @@ def processing_loop():
             active_zones = check_zone_violations(tracked, state.zones)
             new_events, current_close_pairs = process_events(tracked, active_zones, state.proximity_tracker, state.detector.frame_number)
 
-            # Webhook
+            # Webhook and Email
             for evt in new_events:
                 if state.webhook_url:
                     send_webhook_alert(evt.event_type, evt.details, state.webhook_url)
+                if state.email_alert_to:
+                    send_email_alert(evt.event_type, evt.details, state.email_alert_to)
 
             # Draw Zones & Alerts
             annotated = draw_zones(annotated, state.zones)
@@ -168,6 +172,7 @@ def update_config(config: ConfigUpdate):
         if config.video_source is not None: state.video_source = config.video_source
         if config.rtsp_url is not None: state.rtsp_url = config.rtsp_url
         if config.webhook_url is not None: state.webhook_url = config.webhook_url
+        if config.email_alert_to is not None: state.email_alert_to = config.email_alert_to
         if config.conf_thresh is not None: state.conf_thresh = config.conf_thresh
         if config.model_name is not None: 
             state.model_name = config.model_name

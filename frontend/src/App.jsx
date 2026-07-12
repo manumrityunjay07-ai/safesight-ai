@@ -12,6 +12,7 @@ function App() {
     video_source: 'Upload a video',
     rtsp_url: 'rtsp://admin:pass@192.168.1.100:554/stream',
     webhook_url: '',
+    email_alert_to: '',
     conf_thresh: 0.4,
     model_name: 'yolov8n.pt'
   })
@@ -181,6 +182,17 @@ function App() {
             placeholder="https://hooks.slack.com/..." 
             value={config.webhook_url} 
             onChange={(e) => handleConfigChange('webhook_url', e.target.value)}
+          />
+        </div>
+
+        <div className="control-group">
+          <label>Alert Email Address</label>
+          <input 
+            type="email" 
+            className="input-field" 
+            placeholder="safety.officer@company.com" 
+            value={config.email_alert_to} 
+            onChange={(e) => handleConfigChange('email_alert_to', e.target.value)}
           />
         </div>
 
