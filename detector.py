@@ -36,25 +36,20 @@ import warnings
 # Suppress supervision ByteTrack deprecation warning to keep logs clean
 warnings.filterwarnings("ignore", category=FutureWarning, module="supervision")
 import cv2
-from torchvision.models.detection import (
-    FasterRCNN_MobileNet_V3_Large_FPN_Weights,
-    fasterrcnn_mobilenet_v3_large_fpn,
-)
+from ultralytics import YOLO
 
+# COCO class IDs in YOLO are 0-indexed.
+# 0=person, 2=car, 5=bus, 7=truck
 # ---------------------------------------------------------------------------
-# COCO class IDs that are relevant to industrial safety
-# Note: Torchvision COCO classes are 1-indexed (0 is background).
-# 1=person, 3=car, 6=bus, 8=truck
-# ---------------------------------------------------------------------------
-PERSON_CLASS_ID = 1
-VEHICLE_CLASS_IDS = {3, 6, 8}
+PERSON_CLASS_ID = 0
+VEHICLE_CLASS_IDS = {2, 5, 7}
 RELEVANT_CLASS_IDS = {PERSON_CLASS_ID} | VEHICLE_CLASS_IDS
 
 CLASS_NAMES = {
-    1: "person",
-    3: "car",
-    6: "bus",
-    8: "truck"
+    0: "person",
+    2: "car",
+    5: "bus",
+    7: "truck"
 }
 
 # How many historical centroid positions we keep per tracked object.
@@ -73,6 +68,10 @@ class TrackedObject:
     confidence: float
     # Rolling history of centroids — oldest first, newest last.
     history: List[Tuple[int, int]] = field(default_factory=list)
+    
+    # Mocked PPE compliance (in reality, run a second PPE YOLO model on crops)
+    has_hardhat: bool = field(default_factory=lambda: np.random.rand() > 0.5)
+    has_vest: bool = field(default_factory=lambda: np.random.rand() > 0.5)
 
     @property
     def is_person(self) -> bool:
@@ -97,7 +96,7 @@ class SafeSightDetector:
 
     def __init__(
         self,
-        model_name: str = "fasterrcnn_mobilenet_v3_large_fpn",
+        model_name: str = "yolov8n.pt",
         conf_threshold: float = 0.4,
         device: str = "",          # "" → auto (CUDA if available, else CPU)
     ) -> None:
@@ -110,10 +109,9 @@ class SafeSightDetector:
             
         # Reuse cached model if already loaded
         if model_name not in _MODEL_CACHE:
-            print(f"[SafeSight] Loading free BSD-licensed model: {model_name}")
-            self.model = torchvision.models.detection.__dict__[model_name](weights="DEFAULT")
+            print(f"[SafeSight] Loading YOLO model: {model_name}")
+            self.model = YOLO(model_name)
             self.model.to(self.device)
-            self.model.eval()
             _MODEL_CACHE[model_name] = self.model
         else:
             print(f"[SafeSight] Reusing cached model: {model_name}")
@@ -149,26 +147,13 @@ class SafeSightDetector:
         """
         self.frame_number += 1
 
-        # --- Torchvision inference --------------------------------------------
-        # Torchvision expects RGB tensor [C, H, W] normalized to [0, 1]
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        input_tensor = torch.from_numpy(rgb).permute(2, 0, 1).float() / 255.0
-        input_tensor = input_tensor.unsqueeze(0).to(self.device)  # Add batch dimension
+        # --- YOLO inference --------------------------------------------
+        results = self.model(frame, verbose=False)[0]
         
-        with torch.no_grad():
-            preds = self.model(input_tensor)[0]
-
         # Convert to supervision Detections so we can feed them straight into ByteTrack.
-        boxes = preds['boxes'].cpu().numpy()
-        scores = preds['scores'].cpu().numpy()
-        labels = preds['labels'].cpu().numpy()
+        detections = sv.Detections.from_ultralytics(results)
         
-        if len(boxes) > 0:
-            detections = sv.Detections(
-                xyxy=boxes,
-                confidence=scores,
-                class_id=labels
-            )
+        if len(detections) > 0:
             # Filter to our classes and confidence threshold
             mask = np.isin(detections.class_id, list(RELEVANT_CLASS_IDS)) & (detections.confidence >= self.conf_threshold)
             detections = detections[mask]

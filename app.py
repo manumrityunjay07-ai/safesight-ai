@@ -60,6 +60,7 @@ from events import (
     predict_positions,
 )
 from zones import HazardZone, check_zone_violations, default_demo_zones, draw_zones
+from notifications import send_webhook_alert
 
 # ---------------------------------------------------------------------------
 # Page config — must be the very first Streamlit call.
@@ -207,7 +208,7 @@ class SafeSightVideoProcessor(VideoTransformerBase):
     def __init__(self):
         # We instantiate locally because this runs in a separate thread where
         # st.session_state is not safely accessible.
-        self.detector = SafeSightDetector(model_name="fasterrcnn_mobilenet_v3_large_320_fpn", conf_threshold=0.40)
+        self.detector = SafeSightDetector(model_name="yolov8n.pt", conf_threshold=0.40)
         self.proximity_tracker = ProximityTracker()
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
@@ -314,7 +315,7 @@ with st.sidebar:
     st.markdown('<div class="section-header">Video Source</div>', unsafe_allow_html=True)
     video_mode = st.radio(
         "Input mode",
-        ["Upload a video", "Webcam (Live)"],
+        ["Upload a video", "Webcam (Live)", "IP Camera (RTSP)"],
         label_visibility="collapsed",
         disabled=st.session_state.running,
     )
@@ -324,18 +325,24 @@ with st.sidebar:
             "Upload MP4 / AVI", type=["mp4", "avi", "mov"], label_visibility="collapsed",
             disabled=st.session_state.running,
         )
+    elif video_mode == "IP Camera (RTSP)":
+        st.session_state.rtsp_url = st.text_input(
+            "RTSP Stream URL",
+            value=st.session_state.get("rtsp_url", "rtsp://admin:pass@192.168.1.100:554/stream"),
+            disabled=st.session_state.running
+        )
 
     st.markdown('<div class="section-header">Detection Settings</div>', unsafe_allow_html=True)
     conf_thresh = st.slider("Confidence threshold", 0.20, 0.90, 0.40, 0.05,
                              help="Minimum model confidence to accept a detection.",
                              disabled=st.session_state.running)
 
-    # ── Model selector (Permissive BSD-3) ──
-    _available_models = ["fasterrcnn_mobilenet_v3_large_320_fpn"]
+    # ── Model selector ──
+    _available_models = ["yolov8n.pt", "yolov10n.pt"]
     model_size = st.selectbox(
-        "Torchvision Model (Free / BSD-3)",
+        "YOLO Model (Fast / Edge)",
         _available_models,
-        help="This model is 100% free for commercial use (BSD-3 licensed). Weights auto-download on first use.",
+        help="YOLOv8 Nano provides real-time 30+ FPS edge inference.",
         disabled=st.session_state.running,
     )
 
@@ -362,6 +369,11 @@ with st.sidebar:
         help="'Max speed' skips the inter-frame sleep — useful on CPU where inference is slower than the source FPS.",
     )
     st.session_state.realtime_playback = (playback_mode == "Real-time (match source FPS)")
+
+    st.markdown('<div class="section-header">Webhooks (Alerts)</div>', unsafe_allow_html=True)
+    webhook_url = st.text_input("Slack/Teams Webhook URL", value="", placeholder="https://hooks.slack.com/...", disabled=st.session_state.running)
+    if webhook_url:
+        st.session_state.webhook_url = webhook_url
 
     st.divider()
 
@@ -412,15 +424,18 @@ if restart_btn:
 # ── Start ──
 if start_btn:
     # Resolve video path.
-    if uploaded_file is None:
-        st.error("Please upload a video file first.")
-        st.stop()
-    tmp_path = Path("_uploaded_video.mp4")
-    tmp_path.write_bytes(uploaded_file.read())
-    st.session_state.video_path = str(tmp_path)
-
-    # Torchvision handles its own model downloading and caching in ~/.cache/torch/hub/checkpoints
-    # No need to validate if the model file exists in the local directory.
+    if video_mode == "Upload a video":
+        if uploaded_file is None:
+            st.error("Please upload a video file first.")
+            st.stop()
+        tmp_path = Path("_uploaded_video.mp4")
+        tmp_path.write_bytes(uploaded_file.read())
+        st.session_state.video_path = str(tmp_path)
+    elif video_mode == "IP Camera (RTSP)":
+        if not st.session_state.rtsp_url:
+            st.error("Please enter a valid RTSP URL.")
+            st.stop()
+        st.session_state.video_path = st.session_state.rtsp_url
 
     # Open VideoCapture once here — persisted across reruns.
     _release_cap()
@@ -545,8 +560,8 @@ kpi4.metric("🎞️ Frames Processed",      st.session_state.frame_count)
 
 st.divider()
 
-tab_live, tab_events = st.tabs(
-    ["📺 Live Feed", "📋 Event Log"]
+tab_live, tab_events, tab_heatmap = st.tabs(
+    ["📺 Live Feed", "📋 Event Log", "🔥 Heatmap"]
 )
 
 with tab_live:
@@ -555,7 +570,7 @@ with tab_live:
         if video_mode == "Webcam (Live)":
             with st.spinner("Downloading and caching AI model..."):
                 # Preload on main thread so WebRTC worker doesn't hit a 10s timeout
-                SafeSightDetector(model_name="fasterrcnn_mobilenet_v3_large_320_fpn", conf_threshold=0.40)
+                SafeSightDetector(model_name="yolov8n.pt", conf_threshold=0.40)
             webrtc_streamer(
                 key="safesight-webrtc",
                 mode=WebRtcMode.SENDRECV,
@@ -594,6 +609,11 @@ with tab_events:
         )
     events_table_placeholder = st.empty()
 
+with tab_heatmap:
+    st.markdown("### Incident Heatmap")
+    st.write("Aggregated historical near-miss and zone intrusion locations from the local database.")
+    heatmap_placeholder = st.empty()
+
 
 # ---------------------------------------------------------------------------
 # Render functions
@@ -625,6 +645,27 @@ def _render_event_table(filter_types: List[str]) -> None:
     styled = df_display.style.map(_sev_style, subset=["Severity"])
     events_table_placeholder.dataframe(styled, width='stretch', height=420)
 
+def _render_heatmap() -> None:
+    events = load_events()
+    if not events:
+        heatmap_placeholder.info("No events logged yet.")
+        return
+    import pandas as pd
+    import plotly.express as px
+    df = pd.DataFrame(events)
+    # Ensure x and y are ints
+    df['location_x'] = df['location_x'].fillna(0).astype(int)
+    df['location_y'] = df['location_y'].fillna(0).astype(int)
+    
+    # Simple scatter with marginals acting as a heatmap
+    fig = px.density_heatmap(df, x="location_x", y="location_y", 
+                             title="Incident Density",
+                             nbinsx=30, nbinsy=30,
+                             color_continuous_scale="Reds")
+    # Reverse Y axis so it matches video coordinates (0,0 is top left)
+    fig.update_yaxes(autorange="reversed")
+    heatmap_placeholder.plotly_chart(fig, use_container_width=True)
+
 
 
 # ---------------------------------------------------------------------------
@@ -632,7 +673,7 @@ def _render_event_table(filter_types: List[str]) -> None:
 # After processing one frame this block calls st.rerun() so Streamlit can
 # check button state before the next frame — this is what makes Stop work.
 # ---------------------------------------------------------------------------
-if st.session_state.running and st.session_state.detector is not None and video_mode == "Upload a video":
+if st.session_state.running and st.session_state.detector is not None and video_mode in ("Upload a video", "IP Camera (RTSP)"):
     cap: cv2.VideoCapture = st.session_state.cap
 
     # Safety-check: cap may have been released by a concurrent Stop press.
@@ -695,6 +736,11 @@ if st.session_state.running and st.session_state.detector is not None and video_
         alert_str = f"{icon} {evt.details[:60]}..." if len(evt.details) > 60 else f"{icon} {evt.details}"
         st.session_state.recent_alerts.insert(0, alert_str)
         st.session_state.recent_alerts = st.session_state.recent_alerts[:8]
+        
+        # Fire Webhook if configured
+        hook_url = st.session_state.get("webhook_url")
+        if hook_url:
+            send_webhook_alert(evt.event_type, evt.details, hook_url)
 
     # ── Draw zone violation alerts (flashing box) ──
     by_id = {obj.track_id: obj for obj in tracked}
@@ -753,10 +799,6 @@ if st.session_state.running and st.session_state.detector is not None and video_
             for a in st.session_state.recent_alerts
         )
         alert_placeholder.markdown(alerts_html, unsafe_allow_html=True)
-
-    # ── Render event tabs every frame ──
-    with tab_events:
-        _render_event_table(event_filter)
 
     # ── Pacing: only sleep in real-time mode ──
     if st.session_state.realtime_playback:

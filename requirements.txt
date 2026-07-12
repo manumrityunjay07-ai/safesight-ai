@@ -10,3 +10,5 @@ pandas>=2.0.0
 
 streamlit-drawable-canvas
 streamlit-webrtc>=0.47.0
+ultralytics>=8.1.0
+requests>=2.31.0
