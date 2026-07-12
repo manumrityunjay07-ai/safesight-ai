@@ -257,31 +257,21 @@ class SafeSightVideoProcessor(VideoTransformerBase):
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
-# Streamlit Native OIDC Authentication
-try:
-    logged_in = st.user.is_logged_in
-except AttributeError:
-    # This happens when [auth] secrets are not configured in Streamlit Cloud
-    st.markdown('<div style="text-align:center;margin-top:100px;font-size:3rem;">🔒</div>', unsafe_allow_html=True)
-    st.markdown('<h1 style="text-align:center;">Auth Not Configured</h1>', unsafe_allow_html=True)
-    st.error("Google Authentication is not yet configured in Streamlit Secrets. Please follow the instructions in the walkthrough to add your Google Client ID and Secret to your Streamlit Cloud dashboard.")
-    st.stop()
-
+logged_in = True
 if not logged_in:
-    st.markdown('<div style="text-align:center;margin-top:100px;font-size:3rem;">🔶</div>', unsafe_allow_html=True)
-    st.markdown('<h1 style="text-align:center;">SafeSight AI</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align:center;">Please sign in with your Google account to access the dashboard.</p>', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("Sign in with Google", use_container_width=True, type="primary"):
-            st.login()
-    st.stop()
+    pass
 else:
     # Optional: Display who is logged in on the sidebar
     with st.sidebar:
-        st.caption(f"Logged in as: {st.user.email}")
+        try:
+            st.caption(f"Logged in as: {st.user.email}")
+        except:
+            st.caption("Running locally without auth")
         if st.button("Log out"):
-            st.logout()
+            try:
+                st.logout()
+            except:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -563,6 +553,9 @@ with tab_live:
     feed_col, sidebar_col = st.columns([3, 1])
     with feed_col:
         if video_mode == "Webcam (Live)":
+            with st.spinner("Downloading and caching AI model..."):
+                # Preload on main thread so WebRTC worker doesn't hit a 10s timeout
+                SafeSightDetector(model_name="fasterrcnn_mobilenet_v3_large_320_fpn", conf_threshold=0.40)
             webrtc_streamer(
                 key="safesight-webrtc",
                 mode=WebRtcMode.SENDRECV,
