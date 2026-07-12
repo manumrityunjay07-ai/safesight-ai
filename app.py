@@ -264,7 +264,7 @@ with st.sidebar:
     st.markdown('<div class="section-header">Video Source</div>', unsafe_allow_html=True)
     video_mode = st.radio(
         "Input mode",
-        ["Use demo_video.mp4", "Upload a video", "Webcam (index 0)"],
+        ["Upload a video", "Webcam (index 0)"],
         label_visibility="collapsed",
         disabled=st.session_state.running,   # lock while running
     )
@@ -362,17 +362,7 @@ if restart_btn:
 # ── Start ──
 if start_btn:
     # Resolve video path.
-    if video_mode == "Use demo_video.mp4":
-        vp = Path("demo_video.mp4")
-        if not vp.exists():
-            st.error(
-                "demo_video.mp4 not found. Run `python generate_demo_video.py` to create "
-                "a synthetic test clip, or upload real footage via 'Upload a video'.",
-                icon="🎥",
-            )
-            st.stop()
-        st.session_state.video_path = str(vp)
-    elif video_mode == "Upload a video":
+    if video_mode == "Upload a video":
         if uploaded_file is None:
             st.error("Please upload a video file first.")
             st.stop()
@@ -448,9 +438,7 @@ if not st.session_state.running and zone_mode == "Interactive drawing":
     # Try to grab the first frame of the selected video
     bg_image = None
     vp = None
-    if video_mode == "Use demo_video.mp4" and Path("demo_video.mp4").exists():
-        vp = "demo_video.mp4"
-    elif video_mode == "Upload a video" and uploaded_file is not None:
+    if video_mode == "Upload a video" and uploaded_file is not None:
         tmp_path = Path("_uploaded_video.mp4")
         tmp_path.write_bytes(uploaded_file.read())
         vp = str(tmp_path)
