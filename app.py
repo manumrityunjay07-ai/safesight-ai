@@ -36,9 +36,13 @@ from typing import List, Optional
 try:
     import cv2
 except ImportError as e:
+    import sys
+    import subprocess
     import streamlit as st
-    st.error(f"OpenCV Import Error: {e}")
-    raise e
+    st.warning("Fixing OpenCV headless conflict in the background...")
+    subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"], capture_output=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "opencv-python-headless"], capture_output=True)
+    import cv2
 import numpy as np
 import PIL.Image
 import plotly.graph_objects as go
