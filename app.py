@@ -75,6 +75,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* Hide Streamlit Toolbar (Fork/GitHub) and Footer */
+    header[data-testid="stHeader"] {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden;}
+    footer {visibility: hidden;}
+    .viewerBadge_container__1QSob {display: none !important;}
+    .viewerBadge_link__1S137 {display: none !important;}
+    
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
