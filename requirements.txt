@@ -3,13 +3,12 @@ torch>=2.0.0
 torchvision>=0.15.0
 supervision>=0.20.0
 opencv-python-headless>=4.8.0
-streamlit[auth]>=1.42.0
 numpy>=1.24.0
-plotly>=5.18.0
 Pillow>=10.0.0
 pandas>=2.0.0
 
-streamlit-drawable-canvas
-streamlit-webrtc>=0.47.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
 ultralytics>=8.1.0
 requests>=2.31.0
