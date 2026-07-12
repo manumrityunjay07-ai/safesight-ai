@@ -9,3 +9,4 @@ Pillow>=10.0.0
 pandas>=2.0.0
 
 streamlit-drawable-canvas
+streamlit-webrtc>=0.47.0

@@ -40,6 +40,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_drawable_canvas import st_canvas
 import supervision as svt
+import av
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode, RTCConfiguration
 
 # Local modules.
 from detector import SafeSightDetector
@@ -201,6 +203,62 @@ def _release_cap() -> None:
         st.session_state.cap = None
 
 
+class SafeSightVideoProcessor(VideoTransformerBase):
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        if not st.session_state.running or st.session_state.detector is None:
+            return frame
+
+        img = frame.to_ndarray(format="bgr24")
+
+        # Run inference
+        detections = st.session_state.detector.predict(img)
+
+        # Process logic (using session state properties)
+        st.session_state.frame_count += 1
+        current_fps = st.session_state.video_fps
+
+        # Track Proximity Near-Misses
+        prox_alerts = st.session_state.proximity_tracker.update_and_check(
+            detections, PROXIMITY_THRESHOLD_PX
+        )
+        if prox_alerts:
+            st.session_state.event_counts["PROXIMITY_NEAR_MISS"] += len(prox_alerts)
+            for (id1, id2) in prox_alerts:
+                st.session_state.recent_alerts.insert(0, (
+                    datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                    "PROXIMITY_NEAR_MISS",
+                    f"Persons {id1} & {id2} breached proximity"
+                ))
+            st.session_state.recent_alerts = st.session_state.recent_alerts[:15]
+
+        # Draw Zones
+        if st.session_state.zones:
+            img = draw_zones(img, st.session_state.zones)
+            zone_violations = check_zone_violations(detections, st.session_state.zones)
+
+            for (tid, zname) in zone_violations:
+                key = (tid, zname)
+                if key not in st.session_state.zone_fired:
+                    st.session_state.zone_fired.add(key)
+                    st.session_state.event_counts["ZONE_INTRUSION"] += 1
+                    st.session_state.recent_alerts.insert(0, (
+                        datetime.now(timezone.utc).strftime("%H:%M:%S"),
+                        "ZONE_INTRUSION",
+                        f"Person {tid} entered {zname}"
+                    ))
+            st.session_state.recent_alerts = st.session_state.recent_alerts[:15]
+
+        # Draw Detections
+        if len(detections) > 0:
+            labels = [
+                f"ID {tracker_id}" if tracker_id is not None else "Person"
+                for tracker_id in detections.tracker_id
+            ]
+            img = st.session_state.detector.annotate(img, detections, labels)
+
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
@@ -269,10 +327,18 @@ with st.sidebar:
         st.markdown('<span class="status-idle">◉ IDLE</span>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">Video Source</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload MP4 / AVI", type=["mp4", "avi", "mov"], label_visibility="collapsed",
+    video_mode = st.radio(
+        "Input mode",
+        ["Upload a video", "Webcam (Live)"],
+        label_visibility="collapsed",
         disabled=st.session_state.running,
     )
+    uploaded_file = None
+    if video_mode == "Upload a video":
+        uploaded_file = st.file_uploader(
+            "Upload MP4 / AVI", type=["mp4", "avi", "mov"], label_visibility="collapsed",
+            disabled=st.session_state.running,
+        )
 
     st.markdown('<div class="section-header">Detection Settings</div>', unsafe_allow_html=True)
     conf_thresh = st.slider("Confidence threshold", 0.20, 0.90, 0.40, 0.05,
@@ -317,9 +383,9 @@ with st.sidebar:
     # ── Control buttons: Start / Stop / Restart ──
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     start_btn  = btn_col1.button("▶ Start",   type="primary",   width='stretch',
-                                  disabled=st.session_state.running)
+                                  disabled=st.session_state.running or video_mode == "Webcam (Live)")
     stop_btn   = btn_col2.button("⏹ Stop",    width='stretch',
-                                  disabled=not st.session_state.running)
+                                  disabled=not st.session_state.running or video_mode == "Webcam (Live)")
     restart_btn = btn_col3.button("↺ Reset",  width='stretch')
 
     st.markdown('<div class="section-header">Recent Alerts</div>', unsafe_allow_html=True)
@@ -501,8 +567,22 @@ tab_live, tab_events = st.tabs(
 with tab_live:
     feed_col, sidebar_col = st.columns([3, 1])
     with feed_col:
-        frame_display = st.empty()
-        status_row    = st.empty()
+        if video_mode == "Webcam (Live)":
+            webrtc_streamer(
+                key="safesight-webrtc",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=RTCConfiguration(
+                    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+                ),
+                video_processor_factory=SafeSightVideoProcessor,
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+            # Add a small note
+            st.caption("Live metrics and alerts in sidebar will update on page refresh for WebRTC.")
+        else:
+            frame_display = st.empty()
+            status_row    = st.empty()
     with sidebar_col:
         st.markdown('<div class="section-header">Object Tracker</div>', unsafe_allow_html=True)
         tracker_info  = st.empty()
@@ -558,7 +638,7 @@ def _render_event_table(filter_types: List[str]) -> None:
 # After processing one frame this block calls st.rerun() so Streamlit can
 # check button state before the next frame — this is what makes Stop work.
 # ---------------------------------------------------------------------------
-if st.session_state.running and st.session_state.detector is not None:
+if st.session_state.running and st.session_state.detector is not None and video_mode == "Upload a video":
     cap: cv2.VideoCapture = st.session_state.cap
 
     # Safety-check: cap may have been released by a concurrent Stop press.
