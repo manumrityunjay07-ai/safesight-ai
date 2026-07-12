@@ -207,7 +207,7 @@ class SafeSightVideoProcessor(VideoTransformerBase):
     def __init__(self):
         # We instantiate locally because this runs in a separate thread where
         # st.session_state is not safely accessible.
-        self.detector = SafeSightDetector(model_name="fasterrcnn_mobilenet_v3", conf_threshold=0.40)
+        self.detector = SafeSightDetector(model_name="fasterrcnn_mobilenet_v3_large_320_fpn", conf_threshold=0.40)
         self.proximity_tracker = ProximityTracker()
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
@@ -330,7 +330,7 @@ with st.sidebar:
                              disabled=st.session_state.running)
 
     # ── Model selector (Permissive BSD-3) ──
-    _available_models = ["fasterrcnn_mobilenet_v3"]
+    _available_models = ["fasterrcnn_mobilenet_v3_large_320_fpn"]
     model_size = st.selectbox(
         "Torchvision Model (Free / BSD-3)",
         _available_models,
