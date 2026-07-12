@@ -152,7 +152,6 @@ st.markdown(
 
 def _init_state() -> None:
     defaults = {
-        "authenticated": False,
         "dark_mode": True,
         "running": False,
         "frame_count": 0,
@@ -198,22 +197,20 @@ def _release_cap() -> None:
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
-if not st.session_state.authenticated:
+# Streamlit Native OIDC Authentication
+if not st.experimental_user.is_logged_in:
     st.markdown('<div style="text-align:center;margin-top:100px;font-size:3rem;">🔶</div>', unsafe_allow_html=True)
-    st.markdown('<h1 style="text-align:center;">SafeSight AI Login</h1>', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
+    st.markdown('<h1 style="text-align:center;">SafeSight AI</h1>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align:center;">Please sign in with your Google account to access the dashboard.</p>', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login", use_container_width=True)
-            if submitted:
-                if (username == "admin" and password == "safesight123") or (username == "manu" and password in ["1234", "manu"]):
-                    st.session_state.authenticated = True
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials.")
+        st.login()
     st.stop()
+else:
+    # Optional: Display who is logged in on the sidebar
+    with st.sidebar:
+        st.caption(f"Logged in as: {st.experimental_user.email}")
+        st.logout()
 
 
 # ---------------------------------------------------------------------------
