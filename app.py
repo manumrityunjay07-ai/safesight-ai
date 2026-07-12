@@ -200,7 +200,6 @@ def _release_cap() -> None:
 # Streamlit Native OIDC Authentication
 try:
     logged_in = st.user.is_logged_in
-    user_email = st.user.email
 except AttributeError:
     # This happens when [auth] secrets are not configured in Streamlit Cloud
     st.markdown('<div style="text-align:center;margin-top:100px;font-size:3rem;">🔒</div>', unsafe_allow_html=True)
@@ -219,7 +218,7 @@ if not logged_in:
 else:
     # Optional: Display who is logged in on the sidebar
     with st.sidebar:
-        st.caption(f"Logged in as: {user_email}")
+        st.caption(f"Logged in as: {st.user.email}")
         st.logout()
 
 
