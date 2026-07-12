@@ -198,7 +198,7 @@ def _release_cap() -> None:
 # Authentication
 # ---------------------------------------------------------------------------
 # Streamlit Native OIDC Authentication
-if not st.experimental_user.is_logged_in:
+if not st.user.is_logged_in:
     st.markdown('<div style="text-align:center;margin-top:100px;font-size:3rem;">🔶</div>', unsafe_allow_html=True)
     st.markdown('<h1 style="text-align:center;">SafeSight AI</h1>', unsafe_allow_html=True)
     st.markdown('<p style="text-align:center;">Please sign in with your Google account to access the dashboard.</p>', unsafe_allow_html=True)
@@ -209,7 +209,7 @@ if not st.experimental_user.is_logged_in:
 else:
     # Optional: Display who is logged in on the sidebar
     with st.sidebar:
-        st.caption(f"Logged in as: {st.experimental_user.email}")
+        st.caption(f"Logged in as: {st.user.email}")
         st.logout()
 
 
