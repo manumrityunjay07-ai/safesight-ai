@@ -213,7 +213,8 @@ if not logged_in:
     st.markdown('<p style="text-align:center;">Please sign in with your Google account to access the dashboard.</p>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        st.login()
+        if st.button("Sign in with Google", use_container_width=True, type="primary"):
+            st.login()
     st.stop()
 else:
     # Optional: Display who is logged in on the sidebar
