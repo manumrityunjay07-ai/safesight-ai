@@ -777,32 +777,33 @@ if st.session_state.running and st.session_state.detector is not None and video_
 else:
     # ── Idle state — show welcome screen or last frame ──
     with tab_live:
-        if st.session_state.last_frame_rgb is not None:
-            frame_display.image(st.session_state.last_frame_rgb, channels="RGB",
-                                use_container_width=True)
-        else:
-            frame_display.markdown(
-                """
-                <div style="
-                    height:420px; display:flex; flex-direction:column;
-                    align-items:center; justify-content:center;
-                    background:linear-gradient(135deg,#0f172a,#1e293b);
-                    border:2px dashed #334155; border-radius:16px;
-                    color:#475569; text-align:center; gap:16px;
-                ">
-                    <div style="font-size:4rem;">🔶</div>
-                    <div style="font-size:1.4rem;font-weight:700;color:#64748b;">SafeSight AI</div>
-                    <div style="font-size:0.9rem;color:#475569;max-width:380px;line-height:1.6;">
-                        Select a video source in the sidebar<br>
-                        and click <strong style="color:#f97316;">▶ Start</strong> to begin analysis.
+        if video_mode != "Webcam (Live)":
+            if st.session_state.last_frame_rgb is not None:
+                frame_display.image(st.session_state.last_frame_rgb, channels="RGB",
+                                    use_container_width=True)
+            else:
+                frame_display.markdown(
+                    """
+                    <div style="
+                        height:420px; display:flex; flex-direction:column;
+                        align-items:center; justify-content:center;
+                        background:linear-gradient(135deg,#0f172a,#1e293b);
+                        border:2px dashed #334155; border-radius:16px;
+                        color:#475569; text-align:center; gap:16px;
+                    ">
+                        <div style="font-size:4rem;">🔶</div>
+                        <div style="font-size:1.4rem;font-weight:700;color:#64748b;">SafeSight AI</div>
+                        <div style="font-size:0.9rem;color:#475569;max-width:380px;line-height:1.6;">
+                            Select a video source in the sidebar<br>
+                            and click <strong style="color:#f97316;">▶ Start</strong> to begin analysis.
+                        </div>
+                        <div style="font-size:0.75rem;color:#334155;font-family:monospace;">
+                            Computer Vision + ByteTrack + Zone Detection
+                        </div>
                     </div>
-                    <div style="font-size:0.75rem;color:#334155;font-family:monospace;">
-                        Computer Vision + ByteTrack + Zone Detection
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     fw_ = st.session_state.frame_w
     fh_ = st.session_state.frame_h
