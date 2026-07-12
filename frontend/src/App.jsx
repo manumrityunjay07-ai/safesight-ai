@@ -6,6 +6,8 @@ function App() {
   const [isRunning, setIsRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [selectedFile, setSelectedFile] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [streamId, setStreamId] = useState(Date.now())
   const [config, setConfig] = useState({
     video_source: 'Upload a video',
     rtsp_url: 'rtsp://admin:pass@192.168.1.100:554/stream',
@@ -32,20 +34,28 @@ function App() {
     }
   }
 
-  // Start the video feed
   const startStream = async () => {
     try {
       if (config.video_source === 'Upload a video' && selectedFile) {
+        setIsUploading(true);
         const uploadSuccess = await handleFileUpload();
+        setIsUploading(false);
         if (!uploadSuccess) {
            alert("Failed to upload the video.");
            return;
         }
       }
       const res = await fetch(`${API_URL}/api/start`, { method: 'POST' })
-      if (res.ok) setIsRunning(true)
+      const data = await res.json()
+      if (res.ok && data.status === 'success') {
+         setStreamId(Date.now());
+         setIsRunning(true);
+      } else {
+         alert(data.message || "Failed to start stream");
+      }
     } catch (err) {
       console.error(err)
+      setIsUploading(false)
     }
   }
 
@@ -179,9 +189,9 @@ function App() {
             className="btn btn-primary" 
             style={{ flex: 1 }} 
             onClick={startStream} 
-            disabled={isRunning}
+            disabled={isRunning || isUploading}
           >
-            ▶ Start
+            {isUploading ? '⏳ Uploading...' : '▶ Start'}
           </button>
           <button 
             className="btn btn-danger" 
@@ -215,7 +225,7 @@ function App() {
           <div className="video-container glass">
             {isRunning ? (
               <img 
-                src={`${API_URL}/api/video_feed?t=${Date.now()}`} 
+                src={`${API_URL}/api/video_feed?t=${streamId}`} 
                 alt="Live AI Feed" 
                 className="video-feed" 
                 onError={(e) => console.error("Error loading video feed", e)}

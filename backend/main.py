@@ -94,7 +94,7 @@ def processing_loop():
                 state.zones = default_demo_zones(fw, fh)
 
             active_zones = check_zone_violations(tracked, state.zones)
-            new_events, current_close_pairs = process_events(tracked, active_zones, state.proximity_tracker)
+            new_events, current_close_pairs = process_events(tracked, active_zones, state.proximity_tracker, state.detector.frame_number)
 
             # Webhook
             for evt in new_events:
@@ -179,13 +179,16 @@ def get_events():
     events = load_events()
     return {"events": events}
 
-def generate_video_stream():
+def generate_frames():
     while True:
+        if not state.running:
+            time.sleep(0.1)
+            continue
         if state.current_frame_jpg is not None:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + state.current_frame_jpg + b'\r\n')
         time.sleep(0.03)
 
 @app.get("/api/video_feed")
-def video_feed():
-    return StreamingResponse(generate_video_stream(), media_type="multipart/x-mixed-replace; boundary=frame")
+def video_feed(t: str = None):
+    return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
