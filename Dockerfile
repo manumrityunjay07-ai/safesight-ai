@@ -6,18 +6,21 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set working directory and create a non-root user (required by Hugging Face Spaces)
 WORKDIR /app
+RUN useradd -m -u 1000 user
+RUN chown -R user:user /app
+USER user
 
 # Copy requirements and install
-COPY requirements.txt .
+COPY --chown=user:user requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY --chown=user:user . .
 
-# Expose the port Uvicorn will run on
-EXPOSE 8000
+# Expose the port Hugging Face Spaces expects (7860)
+EXPOSE 7860
 
-# Start Uvicorn
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start Uvicorn on port 7860
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7860"]
