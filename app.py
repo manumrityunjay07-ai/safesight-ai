@@ -33,7 +33,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-import cv2
+try:
+    import cv2
+except ImportError as e:
+    import streamlit as st
+    st.error(f"OpenCV Import Error: {e}")
+    raise e
 import numpy as np
 import PIL.Image
 import plotly.graph_objects as go
