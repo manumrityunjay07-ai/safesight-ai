@@ -42,7 +42,11 @@ except ImportError as e:
     st.warning("Fixing OpenCV headless conflict in the background...")
     subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-python-headless"], capture_output=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "opencv-python-headless"], capture_output=True)
-    import cv2
+    try:
+        import cv2
+    except ImportError as e2:
+        st.error(f"Ultimate OpenCV Import Error: {e2}")
+        st.stop()
 import numpy as np
 import PIL.Image
 import plotly.graph_objects as go
