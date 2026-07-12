@@ -269,18 +269,10 @@ with st.sidebar:
         st.markdown('<span class="status-idle">◉ IDLE</span>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">Video Source</div>', unsafe_allow_html=True)
-    video_mode = st.radio(
-        "Input mode",
-        ["Upload a video", "Webcam (index 0)"],
-        label_visibility="collapsed",
-        disabled=st.session_state.running,   # lock while running
+    uploaded_file = st.file_uploader(
+        "Upload MP4 / AVI", type=["mp4", "avi", "mov"], label_visibility="collapsed",
+        disabled=st.session_state.running,
     )
-    uploaded_file = None
-    if video_mode == "Upload a video":
-        uploaded_file = st.file_uploader(
-            "Upload MP4 / AVI", type=["mp4", "avi", "mov"], label_visibility="collapsed",
-            disabled=st.session_state.running,
-        )
 
     st.markdown('<div class="section-header">Detection Settings</div>', unsafe_allow_html=True)
     conf_thresh = st.slider("Confidence threshold", 0.20, 0.90, 0.40, 0.05,
@@ -369,15 +361,12 @@ if restart_btn:
 # ── Start ──
 if start_btn:
     # Resolve video path.
-    if video_mode == "Upload a video":
-        if uploaded_file is None:
-            st.error("Please upload a video file first.")
-            st.stop()
-        tmp_path = Path("_uploaded_video.mp4")
-        tmp_path.write_bytes(uploaded_file.read())
-        st.session_state.video_path = str(tmp_path)
-    else:
-        st.session_state.video_path = 0  # webcam
+    if uploaded_file is None:
+        st.error("Please upload a video file first.")
+        st.stop()
+    tmp_path = Path("_uploaded_video.mp4")
+    tmp_path.write_bytes(uploaded_file.read())
+    st.session_state.video_path = str(tmp_path)
 
     # Torchvision handles its own model downloading and caching in ~/.cache/torch/hub/checkpoints
     # No need to validate if the model file exists in the local directory.
@@ -445,7 +434,7 @@ if not st.session_state.running and zone_mode == "Interactive drawing":
     # Try to grab the first frame of the selected video
     bg_image = None
     vp = None
-    if video_mode == "Upload a video" and uploaded_file is not None:
+    if uploaded_file is not None:
         tmp_path = Path("_uploaded_video.mp4")
         tmp_path.write_bytes(uploaded_file.read())
         vp = str(tmp_path)
