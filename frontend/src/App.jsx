@@ -13,7 +13,7 @@ function App() {
     model_name: 'yolov8n.pt'
   })
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+  const API_URL = 'https://automobiles-buddy-distance-istanbul.trycloudflare.com'
 
   // Start the video feed
   const startStream = async () => {
