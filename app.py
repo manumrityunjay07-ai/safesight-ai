@@ -220,7 +220,8 @@ else:
     # Optional: Display who is logged in on the sidebar
     with st.sidebar:
         st.caption(f"Logged in as: {st.user.email}")
-        st.logout()
+        if st.button("Log out"):
+            st.logout()
 
 
 # ---------------------------------------------------------------------------
