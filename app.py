@@ -211,36 +211,47 @@ class SafeSightVideoProcessor(VideoTransformerBase):
         self.proximity_tracker = ProximityTracker()
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        img = frame.to_ndarray(format="bgr24")
+        try:
+            img = frame.to_ndarray(format="bgr24")
 
-        # Run inference
-        tracked, annotated = self.detector.process_frame(img)
+            # Run inference
+            tracked, annotated = self.detector.process_frame(img)
 
-        # Get close pairs (dummy sets for zones/predictions to satisfy process_events)
-        _, current_close_pairs = process_events(
-            tracked,
-            {}, # zone_violations empty for now in webcam
-            self.proximity_tracker,
-            frame_number=self.detector.frame_number,
-            zone_fired=set(),
-            pred_fired=set(),
-        )
+            # Get close pairs (dummy sets for zones/predictions to satisfy process_events)
+            _, current_close_pairs = process_events(
+                tracked,
+                {}, # zone_violations empty for now in webcam
+                self.proximity_tracker,
+                frame_number=self.detector.frame_number,
+                zone_fired=set(),
+                pred_fired=set(),
+            )
 
-        # Draw proximity alerts
-        centroids = {obj.track_id: obj.centroid for obj in tracked}
-        for pid, vid in current_close_pairs:
-            if pid in centroids and vid in centroids:
-                annotated = draw_proximity_alert(annotated, centroids[pid], centroids[vid], "PROXIMITY", self.detector.frame_number)
+            # Draw proximity alerts
+            centroids = {obj.track_id: obj.centroid for obj in tracked}
+            for pid, vid in current_close_pairs:
+                if pid in centroids and vid in centroids:
+                    annotated = draw_proximity_alert(annotated, centroids[pid], centroids[vid], "PROXIMITY", self.detector.frame_number)
 
-        # Draw predicted trajectories
-        for obj in tracked:
-            vel = _compute_velocity(obj.history)
-            if vel is not None:
-                future = predict_positions(obj.centroid, vel, 20)
-                color  = (0, 200, 255) if obj.is_person else (255, 180, 0)
-                annotated = draw_trajectory_prediction(annotated, future, color)
+            # Draw predicted trajectories
+            for obj in tracked:
+                vel = _compute_velocity(obj.history)
+                if vel is not None:
+                    future = predict_positions(obj.centroid, vel, 20)
+                    color  = (0, 200, 255) if obj.is_person else (255, 180, 0)
+                    annotated = draw_trajectory_prediction(annotated, future, color)
 
-        return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+            return av.VideoFrame.from_ndarray(annotated, format="bgr24")
+        except Exception as e:
+            import traceback
+            err_str = traceback.format_exc()
+            img = frame.to_ndarray(format="bgr24")
+            cv2.putText(img, "ERROR:", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            y = 60
+            for line in err_str.split('\n')[-5:]:
+                cv2.putText(img, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+                y += 20
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 
 # ---------------------------------------------------------------------------
@@ -555,9 +566,15 @@ with tab_live:
             webrtc_streamer(
                 key="safesight-webrtc",
                 mode=WebRtcMode.SENDRECV,
-                rtc_configuration=RTCConfiguration(
-                    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-                ),
+                rtc_configuration=RTCConfiguration({
+                    "iceServers": [{"urls": [
+                        "stun:stun.l.google.com:19302",
+                        "stun:stun1.l.google.com:19302",
+                        "stun:stun2.l.google.com:19302",
+                        "stun:stun3.l.google.com:19302",
+                        "stun:stun4.l.google.com:19302"
+                    ]}]
+                }),
                 video_processor_factory=SafeSightVideoProcessor,
                 media_stream_constraints={"video": True, "audio": False},
                 async_processing=True,
