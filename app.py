@@ -204,59 +204,43 @@ def _release_cap() -> None:
 
 
 class SafeSightVideoProcessor(VideoTransformerBase):
-    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
-        if not st.session_state.running or st.session_state.detector is None:
-            return frame
+    def __init__(self):
+        # We instantiate locally because this runs in a separate thread where
+        # st.session_state is not safely accessible.
+        self.detector = SafeSightDetector(model_name="fasterrcnn_mobilenet_v3", conf_threshold=0.40)
+        self.proximity_tracker = ProximityTracker()
 
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         img = frame.to_ndarray(format="bgr24")
 
         # Run inference
-        detections = st.session_state.detector.predict(img)
+        tracked, annotated = self.detector.process_frame(img)
 
-        # Process logic (using session state properties)
-        st.session_state.frame_count += 1
-        current_fps = st.session_state.video_fps
-
-        # Track Proximity Near-Misses
-        prox_alerts = st.session_state.proximity_tracker.update_and_check(
-            detections, PROXIMITY_THRESHOLD_PX
+        # Get close pairs (dummy sets for zones/predictions to satisfy process_events)
+        _, current_close_pairs = process_events(
+            tracked,
+            {}, # zone_violations empty for now in webcam
+            self.proximity_tracker,
+            frame_number=self.detector.frame_number,
+            zone_fired=set(),
+            pred_fired=set(),
         )
-        if prox_alerts:
-            st.session_state.event_counts["PROXIMITY_NEAR_MISS"] += len(prox_alerts)
-            for (id1, id2) in prox_alerts:
-                st.session_state.recent_alerts.insert(0, (
-                    datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                    "PROXIMITY_NEAR_MISS",
-                    f"Persons {id1} & {id2} breached proximity"
-                ))
-            st.session_state.recent_alerts = st.session_state.recent_alerts[:15]
 
-        # Draw Zones
-        if st.session_state.zones:
-            img = draw_zones(img, st.session_state.zones)
-            zone_violations = check_zone_violations(detections, st.session_state.zones)
+        # Draw proximity alerts
+        centroids = {obj.track_id: obj.centroid for obj in tracked}
+        for pid, vid in current_close_pairs:
+            if pid in centroids and vid in centroids:
+                annotated = draw_proximity_alert(annotated, centroids[pid], centroids[vid], "PROXIMITY", self.detector.frame_number)
 
-            for (tid, zname) in zone_violations:
-                key = (tid, zname)
-                if key not in st.session_state.zone_fired:
-                    st.session_state.zone_fired.add(key)
-                    st.session_state.event_counts["ZONE_INTRUSION"] += 1
-                    st.session_state.recent_alerts.insert(0, (
-                        datetime.now(timezone.utc).strftime("%H:%M:%S"),
-                        "ZONE_INTRUSION",
-                        f"Person {tid} entered {zname}"
-                    ))
-            st.session_state.recent_alerts = st.session_state.recent_alerts[:15]
+        # Draw predicted trajectories
+        for obj in tracked:
+            vel = _compute_velocity(obj.history)
+            if vel is not None:
+                future = predict_positions(obj.centroid, vel, 20)
+                color  = (0, 200, 255) if obj.is_person else (255, 180, 0)
+                annotated = draw_trajectory_prediction(annotated, future, color)
 
-        # Draw Detections
-        if len(detections) > 0:
-            labels = [
-                f"ID {tracker_id}" if tracker_id is not None else "Person"
-                for tracker_id in detections.tracker_id
-            ]
-            img = st.session_state.detector.annotate(img, detections, labels)
-
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
+        return av.VideoFrame.from_ndarray(annotated, format="bgr24")
 
 
 # ---------------------------------------------------------------------------
