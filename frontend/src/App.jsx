@@ -13,10 +13,12 @@ function App() {
     model_name: 'yolov8n.pt'
   })
 
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
   // Start the video feed
   const startStream = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/start', { method: 'POST' })
+      const res = await fetch(`${API_URL}/api/start`, { method: 'POST' })
       if (res.ok) setIsRunning(true)
     } catch (err) {
       console.error(err)
@@ -25,7 +27,7 @@ function App() {
 
   const stopStream = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/stop', { method: 'POST' })
+      const res = await fetch(`${API_URL}/api/stop`, { method: 'POST' })
       if (res.ok) setIsRunning(false)
     } catch (err) {
       console.error(err)
@@ -38,7 +40,7 @@ function App() {
     if (activeTab === 'events' || isRunning) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch('http://localhost:8000/api/events')
+          const res = await fetch(`${API_URL}/api/events`)
           const data = await res.json()
           if (data.events) setEvents(data.events)
         } catch (err) {
@@ -53,7 +55,7 @@ function App() {
     const newConfig = { ...config, [key]: value }
     setConfig(newConfig)
     try {
-      await fetch('http://localhost:8000/api/config', {
+      await fetch(`${API_URL}/api/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [key]: value })
@@ -175,7 +177,7 @@ function App() {
           <div className="video-container glass">
             {isRunning ? (
               <img 
-                src={`http://localhost:8000/api/video_feed?t=${Date.now()}`} 
+                src={`${API_URL}/api/video_feed?t=${Date.now()}`} 
                 alt="Live AI Feed" 
                 className="video-feed" 
                 onError={(e) => console.error("Error loading video feed", e)}

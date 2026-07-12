@@ -1,0 +1,25 @@
+services:
+  # Python FastAPI Backend
+  - type: web
+    name: safesight-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # YOLO/Torch can be heavy, starter or standard plan recommended
+    healthCheckPath: /api/events # Just to check if it's up
+    envVars:
+      - key: PORT
+        value: 8000
+        
+  # React Static Site
+  - type: web
+    name: safesight-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    rootDir: frontend
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: safesight-api
+          envVarKey: RENDER_EXTERNAL_URL
