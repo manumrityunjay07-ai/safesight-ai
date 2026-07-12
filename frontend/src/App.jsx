@@ -5,6 +5,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('live')
   const [isRunning, setIsRunning] = useState(false)
   const [events, setEvents] = useState([])
+  const [selectedFile, setSelectedFile] = useState(null)
   const [config, setConfig] = useState({
     video_source: 'Upload a video',
     rtsp_url: 'rtsp://admin:pass@192.168.1.100:554/stream',
@@ -15,9 +16,32 @@ function App() {
 
   const API_URL = 'https://automobiles-buddy-distance-istanbul.trycloudflare.com'
 
+  const handleFileUpload = async () => {
+    if (!selectedFile) return true;
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    try {
+      const res = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      return res.ok;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  }
+
   // Start the video feed
   const startStream = async () => {
     try {
+      if (config.video_source === 'Upload a video' && selectedFile) {
+        const uploadSuccess = await handleFileUpload();
+        if (!uploadSuccess) {
+           alert("Failed to upload the video.");
+           return;
+        }
+      }
       const res = await fetch(`${API_URL}/api/start`, { method: 'POST' })
       if (res.ok) setIsRunning(true)
     } catch (err) {
@@ -108,6 +132,20 @@ function App() {
               value={config.rtsp_url} 
               onChange={(e) => handleConfigChange('rtsp_url', e.target.value)}
               disabled={isRunning}
+            />
+          </div>
+        )}
+
+        {config.video_source === 'Upload a video' && (
+          <div className="control-group">
+            <label>Select Video File</label>
+            <input 
+              type="file" 
+              accept="video/mp4,video/x-m4v,video/*"
+              className="input-field" 
+              onChange={(e) => setSelectedFile(e.target.files[0])}
+              disabled={isRunning}
+              style={{ padding: '8px 4px' }}
             />
           </div>
         )}

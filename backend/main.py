@@ -4,8 +4,9 @@ import json
 import threading
 import time
 from typing import Optional
-from fastapi import FastAPI, BackgroundTasks, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, BackgroundTasks, Response, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.responses import StreamingResponse
+import shutil
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -84,8 +85,7 @@ def processing_loop():
             
             # Predict and draw
             # Note: For simplicity we draw directly on frame
-            tracked = state.detector.detect_and_track(frame)
-            annotated = state.detector.annotate(frame, tracked)
+            tracked, annotated = state.detector.process_frame(frame)
 
             fh, fw = annotated.shape[:2]
             
@@ -130,8 +130,17 @@ def start_processing():
         if state.cap is not None:
             state.cap.release()
         
-        path = state.rtsp_url if state.video_source == "IP Camera (RTSP)" else state.video_path
-        state.cap = cv2.VideoCapture(path)
+        if state.video_source == "Webcam (Live)":
+            import os
+            if os.name == 'nt':
+                state.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            else:
+                state.cap = cv2.VideoCapture(0)
+        elif state.video_source == "IP Camera (RTSP)":
+            state.cap = cv2.VideoCapture(state.rtsp_url)
+        else:
+            state.cap = cv2.VideoCapture(state.video_path)
+            
         if not state.cap.isOpened():
             return {"status": "error", "message": "Failed to open video source"}
         
@@ -146,6 +155,12 @@ def stop_processing():
             state.cap.release()
             state.cap = None
         return {"status": "success"}
+
+@app.post("/api/upload")
+async def upload_video(file: UploadFile = File(...)):
+    with open(state.video_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"status": "success", "filename": file.filename}
 
 @app.post("/api/config")
 def update_config(config: ConfigUpdate):
