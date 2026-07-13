@@ -17,7 +17,7 @@ function App() {
     model_name: 'yolov8n.pt'
   })
 
-  const API_URL = 'https://automobiles-buddy-distance-istanbul.trycloudflare.com'
+  const API_URL = 'https://armed-strand-district-beneath.trycloudflare.com'
 
   const handleFileUpload = async () => {
     if (!selectedFile) return true;
